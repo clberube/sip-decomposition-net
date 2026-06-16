@@ -1,4 +1,4 @@
-# sip-debye-net
+# sip-decomposition-net
 Repository for the complex-valued variational autoencoder for Debye/Warburg decomposition of spectral induced polarization data
 
 ## Reproducibility

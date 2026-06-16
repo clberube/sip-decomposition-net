@@ -6,7 +6,7 @@
 #    By: clberube <charles.berube@polymtl.ca>       +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/05/13 13:21:42 by clberube          #+#    #+#              #
-#    Updated: 2026/04/07 16:19:12 by clberube         ###   ########.fr        #
+#    Updated: 2026/06/16 16:31:47 by clberube         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -22,9 +22,8 @@ from models import CVAE, cCardioid
 from utilities import train, predict
 from plotlib import plot_learning_curves, plot_fit
 
-
 # For reproducibility
-RANDOM_SEED = 3
+RANDOM_SEED = 11
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 

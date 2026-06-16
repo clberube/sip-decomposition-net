@@ -14,7 +14,6 @@ import torch.nn as nn
 
 from utilities import denormalize
 
-
 log_two_pi = torch.tensor(2 * math.pi).log()
 
 
@@ -79,7 +78,6 @@ def v_delta_from_std(sigma_r, sigma_i, rho=None, cov_ri=None):
 
 
 class CVAE(nn.Module):
-    """Original CVAE model for Debye decomposition"""
 
     def __init__(
         self,
@@ -117,8 +115,8 @@ class CVAE(nn.Module):
         self.w = 2 * torch.pi * self.frequencies.squeeze()
 
         # Consistent natural-log bounds for μ
-        tau_min_log = (1 / self.w).log10().min().floor() - 1
-        tau_max_log = (1 / self.w).log10().max().ceil() + 1
+        tau_min_log = (1 / self.w).log10().min().floor() - 2
+        tau_max_log = (1 / self.w).log10().max().ceil() + 2
 
         self.u_min = tau_min_log / torch.log10(torch.tensor(torch.e))
         self.u_max = tau_max_log / torch.log10(torch.tensor(torch.e))
@@ -133,7 +131,8 @@ class CVAE(nn.Module):
         kernel = []
         tau_grid = torch.exp(u_grid)
         for w_k in self.w:
-            kernel.append(1 / (1 + 1j * w_k * tau_grid))
+            c = 1.0  # or user-defined
+            kernel.append(1 / (1 + (1j * w_k * tau_grid) ** c))
         kernel = torch.stack(kernel, dim=0)
 
         self.register_buffer("u_grid", u_grid)
@@ -154,6 +153,7 @@ class CVAE(nn.Module):
 
         self.mixture_head = nn.ModuleList(
             [
+                nn.Linear(latent_dim, 1),
                 nn.Linear(latent_dim, 1),
                 nn.Linear(latent_dim, 1),
                 nn.Linear(latent_dim, mixture_dim),
@@ -275,7 +275,9 @@ class CVAE(nn.Module):
         B = z.shape[0]
         R = self.R_mixture
         J = self.J_quad
-        r_raw, m0_raw, pi_raw, mu_raw, logvar_raw = (p(z) for p in self.mixture_head)
+        r_raw, m0_raw, eta_raw, pi_raw, mu_raw, logvar_raw = (
+            p(z) for p in self.mixture_head
+        )
 
         # -----------------------------------------------------
         # 2. Physical parameters
@@ -283,9 +285,20 @@ class CVAE(nn.Module):
 
         # ---- ρ0 (positive) ----
         r = denormalize(torch.tanh(r_raw), 0.9, 1.1, -1, 1)
+        r_e = r.view(B, 1)
 
         # ---- dimensionless chargeability m0 in [0,1] ----
         m0 = torch.sigmoid(m0_raw)  # (B,)
+
+        # eta = epsilon_inf * rho_ref, positive and bounded in log space
+        # These bounds work slightly better than unbounded exponentiation
+        eta_min = torch.as_tensor(1e-8, device=z.device, dtype=z.dtype)
+        eta_max = torch.as_tensor(1e-3, device=z.device, dtype=z.dtype)
+
+        log_eta = torch.log(eta_min) + torch.sigmoid(eta_raw) * (
+            torch.log(eta_max) - torch.log(eta_min)
+        )
+        eta = torch.exp(log_eta).view(B, 1)  # (B,1)
 
         # ---- mixture weights ----
         pi = torch.nn.functional.softmax(pi_raw, dim=-1)  # (B,R)
@@ -311,29 +324,49 @@ class CVAE(nn.Module):
         Z = (phi_raw * quad_w).sum(dim=-1, keepdim=True)  # (B,1)
         phi_u = phi_raw / (Z + 1e-12)  # (B,J)
 
-        # RTD physique
-        g_u = m0 * phi_u  # (B,J)
-        g_quad = g_u * quad_w  # (B,J)
-        rho_relax = g_quad.to(self.kernel.dtype) @ self.kernel.T
+        # Dimensionless conductivity-domain RTD: integral equals m0
+        m0_e = m0.view(B, 1)
+        g_u = m0_e * phi_u
+        g_quad = g_u * quad_w
 
-        # IMPORTANT SIGN: gives σ''>0 and correct SIP slope
-        rho_star = (1 - m0) + rho_relax
-
-        z_out = r * rho_star
+        # Relaxation contribution:
+        # sigma_relax = m0 * integral phi(u) lambda(omega, exp(u)) du
+        sigma_relax = g_quad.to(self.kernel.dtype) @ self.kernel.T
 
         # -----------------------------------------------------
-        # 4. RAW return
+        # 5. Conductivity-domain forward model
+        # -----------------------------------------------------
+        w = self.w.view(1, -1).to(self.kernel.dtype)  # (1,n_freq)
+        m0_c = m0_e.to(self.kernel.dtype)
+        r_c = r_e.to(self.kernel.dtype)
+        eta_c = eta.to(self.kernel.dtype)
+
+        # Conductivity-domain forward model, normalized by sigma0
+        sigma_star_norm_0 = (1.0 - sigma_relax) / (1.0 - m0_c) + 1j * w * eta_c * r_c
+
+        # -----------------------------------------------------
+        # 6. Conductivity to resistivity
+        # -----------------------------------------------------
+        rho_star_norm_0 = 1.0 / sigma_star_norm_0  # rho*(omega) / rho0
+
+        # -----------------------------------------------------
+        # 7. Output normalized by rho_ref
+        # -----------------------------------------------------
+        z_out = r_c * rho_star_norm_0
+
+        # -----------------------------------------------------
+        # 8. RAW return
         # -----------------------------------------------------
         if raw:
-            return z_out, (r_raw, m0_raw, pi_raw, mu_raw, logvar_raw), ()
+            return z_out, (r_raw, m0_raw, pi_raw, mu_raw, logvar_raw, eta_raw), ()
 
         # -------------------------------------------------
         # RTD Debye discrète fine sur la grille u_grid
         # -------------------------------------------------
         tau_j = torch.exp(self.u_grid).repeat(B, 1)  # (B,J)
-        m_j = m0 * phi_u * self.quad_w.view(1, J)  # (B,J)
+        m_j = g_quad  # (B,J)
 
-        return z_out, (r, m0, pi, mu, sigma), (tau_j, m_j)
+        return z_out, (r, m0, pi, mu, sigma, eta), (tau_j, m_j)
 
     def forward(self, x, raw=False):
         mu, logvar = self.encode(x)

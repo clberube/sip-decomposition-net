@@ -215,7 +215,6 @@ def train(
 
 
 def predict(model, dataloader, n_reps=100):
-    """TODO: This should be vectorized for faster inference"""
 
     model.eval()
 
@@ -225,6 +224,7 @@ def predict(model, dataloader, n_reps=100):
         "logvar_pred": [],  # encoder logvar
         "rho0_pred": [],  # (N, n_reps)
         "m0_pred": [],  # (N, n_reps)
+        "epsilon_pred": [],  # (N, n_reps)
         "pi_pred": [],  # (N, n_reps, R)
         "mu_rtd_pred": [],  # (N, n_reps, R)
         "sigma_rtd_pred": [],  # (N, n_reps, R)
@@ -235,9 +235,9 @@ def predict(model, dataloader, n_reps=100):
     with torch.no_grad():
         for data_batch, _ in dataloader:
 
-            n_samples = data_batch.shape[0]  # unused for now
+            n_samples = data_batch.shape[0]
 
-            # Storage lists for this batch
+            # storage lists for this batch
             Z_storage = []
             mu_storage = []
             logvar_storage = []
@@ -248,23 +248,27 @@ def predict(model, dataloader, n_reps=100):
             sigma_rtd_storage = []
             tau_storage = []
             m_storage = []
+            epsilon_storage = []
 
-            # Sample n_reps times for Monte Carlo inference
+            # -------------------------------------------
+            # sample n_reps times for Monte Carlo inference
+            # -------------------------------------------
             for _ in range(n_reps):
 
                 xp, mu_enc, logvar_enc, param, rtd = model(data_batch)
 
-                # Unpack decoder outputs
-                rho0, m0, pi, mu_rtd, sigma_rtd = param
+                # unpack decoder outputs
+                rho0, m0, pi, mu_rtd, sigma_rtd, epsilon = param
                 tau_j, m_j = rtd
 
-                # Append to storage
+                # append to storage
                 Z_storage.append(xp.cpu().numpy())
                 mu_storage.append(mu_enc.cpu().numpy())
                 logvar_storage.append(logvar_enc.cpu().numpy())
 
                 rho0_storage.append(rho0.cpu().numpy())
                 m0_storage.append(m0.cpu().numpy())
+                epsilon_storage.append(m0.cpu().numpy())
 
                 pi_storage.append(pi.cpu().numpy())
                 mu_rtd_storage.append(mu_rtd.cpu().numpy())
@@ -273,14 +277,17 @@ def predict(model, dataloader, n_reps=100):
                 tau_storage.append(tau_j.cpu().numpy())
                 m_storage.append(m_j.cpu().numpy())
 
-            # Stack along repetition axis
-            # shapes = (n_samples, n_reps, ...)
+            # -------------------------------------------
+            # stack along repetition axis
+            # shapes → (n_samples, n_reps, ...)
+            # -------------------------------------------
             all_results["Z_pred"].append(np.stack(Z_storage, axis=1))
             all_results["mu_pred"].append(np.stack(mu_storage, axis=1))
             all_results["logvar_pred"].append(np.stack(logvar_storage, axis=1))
 
             all_results["rho0_pred"].append(np.stack(rho0_storage, axis=1))
             all_results["m0_pred"].append(np.stack(m0_storage, axis=1))
+            all_results["epsilon_pred"].append(np.stack(epsilon_storage, axis=1))
 
             all_results["pi_pred"].append(np.stack(pi_storage, axis=1))
             all_results["mu_rtd_pred"].append(np.stack(mu_rtd_storage, axis=1))
@@ -289,7 +296,9 @@ def predict(model, dataloader, n_reps=100):
             all_results["tau_pred"].append(np.stack(tau_storage, axis=1))
             all_results["m_pred"].append(np.stack(m_storage, axis=1))
 
-    # Concatenate across batches
+    # -------------------------------------------
+    # concatenate across batches
+    # -------------------------------------------
     for k in all_results:
         all_results[k] = np.concatenate(all_results[k], axis=0)
 
