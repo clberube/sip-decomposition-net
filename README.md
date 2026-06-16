@@ -1,5 +1,5 @@
 # sip-debye-net
-Repository for the complex-valued variational autoencoder for Debye decomposition of spectral induced polarization data
+Repository for the complex-valued variational autoencoder for Debye/Warburg decomposition of spectral induced polarization data
 
 ## Reproducibility
 The repository currently contains all code necessary to load data, train the model and predict relaxation time distributions across the dataset and is ready for manuscript peer-review. 
