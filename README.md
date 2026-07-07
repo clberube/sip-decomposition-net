@@ -51,22 +51,17 @@ is decoded into:
 - a normalized reference resistivity, `rho0`;
 - total dimensionless chargeability, `m0`;
 - a 128-component Gaussian mixture in natural-log relaxation time;
-- a bounded high-frequency permittivity term, `eta`;
+- a bounded high-frequency permittivity term, `epsilon`;
 - a reconstructed complex spectrum.
 
 The Gaussian mixture is evaluated on a 100-point quadrature grid. Its
-normalized RTD is integrated through the Debye kernel
-
-```text
-K(omega, tau) = 1 / (1 + i omega tau)
-```
-
+normalized RTD is integrated through the Warburg or Debye kernels 
 and the resulting conductivity is converted back to normalized complex
 resistivity. See `CVAE.decode()` in `models.py` for the complete forward model.
 
 The training objective combines a complex Gaussian negative log-likelihood,
 using the supplied real and imaginary measurement uncertainties, with the
-usual diagonal-Gaussian latent KL divergence.
+usual diagonal Gaussian latent KL divergence.
 
 ## Running inference
 
@@ -132,9 +127,7 @@ validation split in this repository.
 
 ### Bundled dataset
 
-`data/data_dict.pt` is a PyTorch-serialized dictionary. Load it only from a
-trusted source because general PyTorch pickle files can execute code during
-deserialization.
+`data/data_dict.pt` is a PyTorch-serialized dictionary. 
 
 | Key | Shape/type | Meaning |
 | --- | --- | --- |
@@ -162,7 +155,7 @@ samples, `M = n_reps`, latent dimension `L`, mixture size `R`, quadrature size
 | `logvar_pred` | `(N, M, L)` | Encoder log-variances (repeated across draws) |
 | `rho0_pred` | `(N, M, 1)` | Normalized reference resistivity |
 | `m0_pred` | `(N, M, 1)` | Total chargeability |
-| `epsilon_pred` | `(N, M, 1)` | Permittivity-related decoder output (`eta`) |
+| `epsilon_pred` | `(N, M, 1)` | Permittivity-related decoder output (`epsilon`) |
 | `pi_pred` | `(N, M, R)` | Gaussian-mixture weights |
 | `mu_rtd_pred` | `(N, M, R)` | Mixture centers in `ln(tau)` |
 | `sigma_rtd_pred` | `(N, M, R)` | Mixture widths in `ln(tau)` |
