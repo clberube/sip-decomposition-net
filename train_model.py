@@ -6,7 +6,7 @@
 #    By: clberube <charles.berube@polymtl.ca>       +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/05/13 13:21:42 by clberube          #+#    #+#              #
-#    Updated: 2026/06/16 16:31:47 by clberube         ###   ########.fr        #
+#    Updated: 2026/07/07 16:06:16 by clberube         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -36,7 +36,6 @@ TRAIN_MODEL = False
 SAVE_WEIGHTS = False
 LOAD_WEIGHTS = True
 SAVE_FIGURES = False
-SAVE_RESULTS = False
 
 # Number of maximum training epochs (assuming no early stopping)
 n_epoch = int(1e5)
@@ -44,12 +43,10 @@ n_epoch = int(1e5)
 # User-defined directories
 wt_dir = Path("./weights")
 fig_dir = Path("./figures") if SAVE_FIGURES else None
-res_dir = Path("./results") if SAVE_RESULTS else None
 data_dir = Path("./data")
 
 os.makedirs(wt_dir, exist_ok=True) if (SAVE_WEIGHTS or LOAD_WEIGHTS) else None
 os.makedirs(fig_dir, exist_ok=True) if SAVE_FIGURES else None
-os.makedirs(res_dir, exist_ok=True) if SAVE_RESULTS else None
 
 data_dict = torch.load(data_dir / "data_dict.pt")
 

@@ -268,7 +268,7 @@ def predict(model, dataloader, n_reps=100):
 
                 rho0_storage.append(rho0.cpu().numpy())
                 m0_storage.append(m0.cpu().numpy())
-                epsilon_storage.append(m0.cpu().numpy())
+                epsilon_storage.append(epsilon.cpu().numpy())
 
                 pi_storage.append(pi.cpu().numpy())
                 mu_rtd_storage.append(mu_rtd.cpu().numpy())
